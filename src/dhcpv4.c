@@ -684,17 +684,20 @@ void notify_armada()
     time_t now = odhcpd_time();
 
     char buf[1024] = {0};
-    snprintf(buf, sizeof(buf) , "/odhcpd\n");
+    snprintf(buf, sizeof(buf) , "/odhcpd\n{");
 
+    bool first = true;
     struct interface *iface;
     list_for_each_entry(iface, &interfaces, head) {
         if (iface->dhcpv4 != RELAYD_SERVER)
             continue;
 
         snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1,
-                "%s\n", iface->name);
+                "%c\"%s\":[\n",  first?' ':',',iface->name);
+        first = false;
 
         struct dhcpv4_assignment *lease;
+        bool first2 = true;
         list_for_each_entry(lease, &iface->dhcpv4_assignments, head) {
             if (lease->valid_until < now)
                 continue;
@@ -707,10 +710,13 @@ void notify_armada()
             inet_ntop(AF_INET, &addr, ibuf, INET_ADDRSTRLEN);
 
             snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1,
-                    "\t%s\t%s\t%d\t%s\n",
-                    mbuf,ibuf, lease->valid_until, lease->hostname);
+                    "%c {\"m\":\"%s\",\"ip\":\"%s\",\"l\":\"%d\",\"n\":\"%s\"}",
+                    first2?' ':',', mbuf,ibuf, lease->valid_until, lease->hostname);
+            first2 = false;
         }
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1, "]");
     }
+    snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1, "}");
 
     unixbus_invoke("/var/run/unixbus/armada.seqpacket", buf, strlen(buf));
 }
