@@ -39,6 +39,9 @@ static struct dhcpv4_assignment* dhcpv4_lease(struct interface *iface,
 		enum dhcpv4_msg msg, const uint8_t *mac, struct in_addr reqaddr,
 		const char *hostname);
 
+
+
+
 // Create socket and register events
 int init_dhcpv4(void)
 {
@@ -323,6 +326,7 @@ static void handle_dhcpv4(void *addr, void *data, size_t len,
 		if (opt->type == DHCPV4_OPT_MESSAGE && opt->len == 1) {
 			reqmsg = opt->data[0];
 		} else if (opt->type == DHCPV4_OPT_HOSTNAME && opt->len > 0) {
+            debug_fprintf(stderr, "hostname is %.*s\n", opt->len, opt->data);
 			memcpy(hostname, opt->data, opt->len);
 			hostname[opt->len] = 0;
 		} else if (opt->type == DHCPV4_OPT_IPADDRESS && opt->len == 4) {
@@ -585,6 +589,9 @@ static bool dhcpv4_assign(struct interface *iface,
 }
 
 
+void notify_armada();
+
+
 static struct dhcpv4_assignment* dhcpv4_lease(struct interface *iface,
 		enum dhcpv4_msg msg, const uint8_t *mac, struct in_addr reqaddr,
 		const char *hostname)
@@ -660,7 +667,50 @@ static struct dhcpv4_assignment* dhcpv4_lease(struct interface *iface,
 		a->valid_until = now + 3600; // Block address for 1h
 	}
 
+    notify_armada();
 
 	return lease;
 }
 
+
+/*unibus version 1 absolute minimal invoke */
+#include<sys/un.h>
+#include<sys/socket.h>
+#include<unistd.h>
+int unixbus_invoke(const char*path,const char*message,int len){struct sockaddr_un sa;sa.sun_family=AF_UNIX;strcpy(sa.sun_path,path);int client=socket(AF_UNIX,SOCK_SEQPACKET,0);int l=strlen(sa.sun_path)+sizeof(sa.sun_family);if(connect(client,(struct sockaddr*)&sa,l)!=0){return 0;}send(client,message,len,0);close(client);}
+
+void notify_armada()
+{
+    time_t now = odhcpd_time();
+
+    char buf[1024] = {0};
+    snprintf(buf, sizeof(buf) , "/odhcpd\n");
+
+    struct interface *iface;
+    list_for_each_entry(iface, &interfaces, head) {
+        if (iface->dhcpv4 != RELAYD_SERVER)
+            continue;
+
+        snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1,
+                "%s\n", iface->name);
+
+        struct dhcpv4_assignment *lease;
+        list_for_each_entry(lease, &iface->dhcpv4_assignments, head) {
+            if (lease->valid_until < now)
+                continue;
+
+            char mbuf[13];
+            odhcpd_hexlify(mbuf, lease->hwaddr, sizeof(lease->hwaddr));
+
+            char ibuf[INET_ADDRSTRLEN];
+            struct in_addr addr = {htonl(lease->addr)};
+            inet_ntop(AF_INET, &addr, ibuf, INET_ADDRSTRLEN);
+
+            snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1,
+                    "\t%s\t%s\t%d\t%s\n",
+                    mbuf,ibuf, lease->valid_until, lease->hostname);
+        }
+    }
+
+    unixbus_invoke("/var/run/unixbus/armada.seqpacket", buf, strlen(buf));
+}

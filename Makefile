@@ -16,7 +16,7 @@ clean:
 run:
 	ssh 16.shakuras.lifeline killall odhcpd || true
 	make -j4
-	sleep 1
+	sleep 1.5
 	mips-openwrt-linux-strip odhcpd
 	scp odhcpd 16.shakuras.lifeline:/tmp/odhcpd
 	sleep 2
