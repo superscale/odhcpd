@@ -169,9 +169,8 @@ static void close_interface(struct interface *iface)
 	if (iface->head.next)
 		list_del(&iface->head);
 
-	setup_router_interface(iface, false);
-	setup_dhcpv6_interface(iface, false);
-	setup_ndp_interface(iface, false);
+    debug_fprintf(stderr, "close_interface(%s)\n", iface->name);
+
 	setup_dhcpv4_interface(iface, false);
 
 	clean_interface(iface);
@@ -349,14 +348,18 @@ int config_parse_interface(void *data, size_t len, const char *name, bool overwr
 		ifname = ubus_get_ifname(name);
 #endif
 
-	if (!iface->ifname[0] && !ifname)
+	if (!iface->ifname[0] && !ifname) {
+        debug_fprintf(stderr, "no interface name for section %s\n", iface->name);
 		goto err;
+    }
 
 	if (ifname)
 		strncpy(iface->ifname, ifname, sizeof(iface->ifname) - 1);
 
-	if ((iface->ifindex = if_nametoindex(iface->ifname)) <= 0)
+	if ((iface->ifindex = if_nametoindex(iface->ifname)) <= 0) {
+        debug_fprintf(stderr, "iface->ifindex = if_nametoindex(iface->ifname)) <= 0\n");
 		goto err;
+    }
 
 	iface->inuse = true;
 
@@ -368,8 +371,10 @@ int config_parse_interface(void *data, size_t len, const char *name, bool overwr
 
 	if ((c = tb[IFACE_ATTR_LEASETIME])) {
 		double time = parse_leasetime(c);
-		if (time < 0)
-			goto err;
+		if (time < 0) {
+            debug_fprintf(stderr, "lease time < 0\n");
+            goto err;
+        }
 
 		if (time >= 60)
 			iface->dhcpv4_leasetime = time;
@@ -399,8 +404,10 @@ int config_parse_interface(void *data, size_t len, const char *name, bool overwr
 
 			iface->upstream = realloc(iface->upstream,
 					iface->upstream_len + blobmsg_data_len(cur));
-			if (!iface->upstream)
+			if (!iface->upstream) {
+                debug_fprintf(stderr, "!iface->upstream\n");
 				goto err;
+            }
 
 			memcpy(iface->upstream + iface->upstream_len, blobmsg_get_string(cur), blobmsg_data_len(cur));
 			iface->upstream_len += blobmsg_data_len(cur);
@@ -411,29 +418,37 @@ int config_parse_interface(void *data, size_t len, const char *name, bool overwr
 	if ((c = tb[IFACE_ATTR_RA])) {
 		if ((mode = parse_mode(blobmsg_get_string(c))) >= 0)
 			iface->ra = mode;
-		else
-			goto err;
+        else {
+            debug_fprintf(stderr, "!parse_mode(ra)\n");
+            goto err;
+        }
 	}
 
 	if ((c = tb[IFACE_ATTR_DHCPV4])) {
 		if ((mode = parse_mode(blobmsg_get_string(c))) >= 0)
 			iface->dhcpv4 = mode;
-		else
-			goto err;
+        else {
+            debug_fprintf(stderr, "!parse_mode(dhcpv4)\n");
+            goto err;
+        }
 	}
 
 	if ((c = tb[IFACE_ATTR_DHCPV6])) {
 		if ((mode = parse_mode(blobmsg_get_string(c))) >= 0)
 			iface->dhcpv6 = mode;
-		else
+		else {
+            debug_fprintf(stderr, "parse_mode(dhcpv6)\n");
 			goto err;
+        }
 	}
 
 	if ((c = tb[IFACE_ATTR_NDP])) {
 		if ((mode = parse_mode(blobmsg_get_string(c))) >= 0)
 			iface->ndp = mode;
-		else
+		else {
+            debug_fprintf(stderr, "parse_mode(ndp)\n");
 			goto err;
+        }
 	}
 
 	if ((c = tb[IFACE_ATTR_ROUTER])) {
@@ -448,11 +463,14 @@ int config_parse_interface(void *data, size_t len, const char *name, bool overwr
 			if (inet_pton(AF_INET, blobmsg_get_string(cur), &addr4) == 1) {
 				iface->dhcpv4_router = realloc(iface->dhcpv4_router,
 						(++iface->dhcpv4_router_cnt) * sizeof(*iface->dhcpv4_router));
-				if (!iface->dhcpv4_router)
-					goto err;
+                if (!iface->dhcpv4_router) {
+                    debug_fprintf(stderr, "!iface->dhcpv4_router\n");
+                    goto err;
+                }
 
 				iface->dhcpv4_router[iface->dhcpv4_router_cnt - 1] = addr4;
 			} else {
+                debug_fprintf(stderr, "!inet_pton\n");
 				goto err;
 			}
 		}
@@ -472,18 +490,23 @@ int config_parse_interface(void *data, size_t len, const char *name, bool overwr
 			if (inet_pton(AF_INET, blobmsg_get_string(cur), &addr4) == 1) {
 				iface->dhcpv4_dns = realloc(iface->dhcpv4_dns,
 						(++iface->dhcpv4_dns_cnt) * sizeof(*iface->dhcpv4_dns));
-				if (!iface->dhcpv4_dns)
+				if (!iface->dhcpv4_dns) {
+                    debug_fprintf(stderr, "!iface->dhcpv4_dns\n");
 					goto err;
+                }
 
 				iface->dhcpv4_dns[iface->dhcpv4_dns_cnt - 1] = addr4;
 			} else if (inet_pton(AF_INET6, blobmsg_get_string(cur), &addr6) == 1) {
 				iface->dns = realloc(iface->dns,
 						(++iface->dns_cnt) * sizeof(*iface->dns));
-				if (!iface->dns)
-					goto err;
+				if (!iface->dns) {
+                    debug_fprintf(stderr, "!iface->dns\n");
+                    goto err;
+                }
 
 				iface->dns[iface->dns_cnt - 1] = addr6;
 			} else {
+                debug_fprintf(stderr, "!inet_pton 2\n");
 				goto err;
 			}
 		}
@@ -504,12 +527,16 @@ int config_parse_interface(void *data, size_t len, const char *name, bool overwr
 				domain[domainlen - 1] = 0;
 
 			int len = dn_comp(domain, buf, sizeof(buf), NULL, NULL);
-			if (len <= 0)
+			if (len <= 0) {
+                debug_fprintf(stderr, "len <= 0\n");
 				goto err;
+            }
 
 			iface->search = realloc(iface->search, iface->search_len + len);
-			if (!iface->search)
+			if (!iface->search) {
+                debug_fprintf(stderr, "!iface->search\n");
 				goto err;
+            }
 
 			memcpy(&iface->search[iface->search_len], buf, len);
 			iface->search_len += len;
@@ -553,8 +580,10 @@ int config_parse_interface(void *data, size_t len, const char *name, bool overwr
 			iface->route_preference = -1;
 		else if (!strcmp(prio, "medium") || !strcmp(prio, "default"))
 			iface->route_preference = 0;
-		else
-			goto err;
+        else {
+            debug_fprintf(stderr, "IFACE_ATTR_RA_PREFERENCE\n");
+            goto err;
+        }
 	}
 
 	if ((c = tb[IFACE_ATTR_PD_MANAGER]))
@@ -562,8 +591,10 @@ int config_parse_interface(void *data, size_t len, const char *name, bool overwr
 				sizeof(iface->dhcpv6_pd_manager) - 1);
 
 	if ((c = tb[IFACE_ATTR_PD_CER]) &&
-			inet_pton(AF_INET6, blobmsg_get_string(c), &iface->dhcpv6_pd_cer) < 1)
+			inet_pton(AF_INET6, blobmsg_get_string(c), &iface->dhcpv6_pd_cer) < 1) {
+        debug_fprintf(stderr, "!inet_pton(IFACE_ATTR_PD_CER)\n");
 		goto err;
+    }
 
 	if ((c = tb[IFACE_ATTR_NDPROXY_ROUTING]))
 		iface->learn_routes = blobmsg_get_bool(c);
@@ -695,9 +726,6 @@ void odhcpd_reload(void)
 				i->ndp = (master && master->ndp == RELAYD_RELAY) ?
 						RELAYD_RELAY : RELAYD_DISABLED;
 
-			setup_router_interface(i, true);
-			setup_dhcpv6_interface(i, true);
-			setup_ndp_interface(i, true);
 			setup_dhcpv4_interface(i, true);
 		} else {
 			close_interface(i);

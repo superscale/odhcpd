@@ -62,14 +62,14 @@ int main()
 	uloop_init();
 
 	if (getuid() != 0) {
-		syslog(LOG_ERR, "Must be run as root!");
+		fprintf(stderr, "Must be run as root!\n");
 		return 2;
 	}
 
 	ioctl_sock = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
 
 	if ((rtnl_socket = odhcpd_open_rtnl()) < 0) {
-		syslog(LOG_ERR, "Unable to open socket: %s", strerror(errno));
+		fprintf(stderr, "Unable to open socket: %s\n", strerror(errno));
 		return 2;
 	}
 
@@ -79,15 +79,6 @@ int main()
 	signal(SIGUSR1, SIG_IGN);
 	signal(SIGINT, sighandler);
 	signal(SIGTERM, sighandler);
-
-	if (init_router())
-		return 4;
-
-	if (init_dhcpv6())
-		return 4;
-
-	if (init_ndp())
-		return 4;
 
 	if (init_dhcpv4())
 		return 4;
@@ -103,7 +94,7 @@ int odhcpd_open_rtnl(void)
 	// Connect to the kernel netlink interface
 	struct sockaddr_nl nl = {.nl_family = AF_NETLINK};
 	if (connect(sock, (struct sockaddr*)&nl, sizeof(nl))) {
-		syslog(LOG_ERR, "Failed to connect to kernel rtnetlink: %s",
+		fprintf(stderr, "Failed to connect to kernel rtnetlink: %s\n",
 				strerror(errno));
 		return -1;
 	}
@@ -179,10 +170,10 @@ ssize_t odhcpd_send(int socket, struct sockaddr_in6 *dest,
 
 	ssize_t sent = sendmsg(socket, &msg, MSG_DONTWAIT);
 	if (sent < 0)
-		syslog(LOG_NOTICE, "Failed to send to %s%%%s (%s)",
+		fprintf(stderr, "Failed to send to %s%%%s (%s)\n",
 				ipbuf, iface->ifname, strerror(errno));
 	else
-		syslog(LOG_DEBUG, "Sent %li bytes to %s%%%s",
+		debug_fprintf(stderr, "Sent %li bytes to %s%%%s\n",
 				(long)sent, ipbuf, iface->ifname);
 	return sent;
 }
@@ -443,8 +434,8 @@ static void odhcpd_receive_packets(struct uloop_fd *u, _unused unsigned int even
 		else if (addr.in.sin_family == AF_INET)
 			inet_ntop(AF_INET, &addr.in.sin_addr, ipbuf, sizeof(ipbuf));
 
-		syslog(LOG_DEBUG, "--");
-		syslog(LOG_DEBUG, "Received %li Bytes from %s%%%s", (long)len,
+		debug_fprintf(stderr, "--\n");
+		debug_fprintf(stderr, "Received %li Bytes from %s%%\n", (long)len,
 				ipbuf, (iface) ? iface->ifname : "netlink");
 
 		e->handle_dgram(&addr, data_buf, len, iface, dest);

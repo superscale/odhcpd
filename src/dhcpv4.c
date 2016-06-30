@@ -78,12 +78,13 @@ int setup_dhcpv4_interface(struct interface *iface, bool enable)
 	}
 
 	if (iface->dhcpv4 && enable) {
+        fprintf(stderr, "setting up dhcpv4 on %s\n", iface->name);
 		if (!iface->dhcpv4_assignments.next)
 			INIT_LIST_HEAD(&iface->dhcpv4_assignments);
 
 		int sock = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, IPPROTO_UDP);
 		if (sock < 0) {
-			syslog(LOG_ERR, "Failed to create DHCPv4 server socket: %s",
+			fprintf(stderr, "Failed to create DHCPv4 server socket: %s\n",
 					strerror(errno));
 			return -1;
 		}
@@ -107,14 +108,14 @@ int setup_dhcpv4_interface(struct interface *iface, bool enable)
 					{INADDR_ANY}, {0}};
 
 		if (bind(sock, (struct sockaddr*)&bind_addr, sizeof(bind_addr))) {
-			syslog(LOG_ERR, "Failed to open DHCPv4 server socket: %s",
+			fprintf(stderr, "Failed to open DHCPv4 server socket: %s\n",
 					strerror(errno));
 			return -1;
 		}
 
 
 		if (ntohl(iface->dhcpv4_start.s_addr) > ntohl(iface->dhcpv4_end.s_addr)) {
-			syslog(LOG_ERR, "Invalid DHCP range");
+			fprintf(stderr, "Invalid DHCP range\n");
 			return -1;
 		}
 
@@ -172,7 +173,7 @@ int setup_dhcpv4_interface(struct interface *iface, bool enable)
 			size_t hostlen = strlen(lease->hostname) + 1;
 			struct dhcpv4_assignment *a = calloc(1, sizeof(*a) + hostlen);
 			if (!a) {
-				syslog(LOG_ERR, "Calloc failed for static lease on interface %s",
+				fprintf(stderr, "Calloc failed for static lease on interface %s\n",
 					iface->ifname);
 				return -1;
 			}
@@ -263,12 +264,12 @@ static void handle_dhcpv4(void *addr, void *data, size_t len,
 	struct sockaddr_in ifaddr;
 	struct sockaddr_in ifnetmask;
 
-	syslog(LOG_NOTICE, "Got DHCPv4 request");
+	fprintf(stderr, "Got DHCPv4 request\n");
 
 	struct ifreq ifreq;
 	memcpy(ifreq.ifr_name, iface->ifname, sizeof(ifreq.ifr_name));
 	if (ioctl(sock, SIOCGIFADDR, &ifreq)) {
-		syslog(LOG_WARNING, "DHCPv4 failed to detect address: %s", strerror(errno));
+		fprintf(stderr, "DHCPv4 failed to detect address: %s\n", strerror(errno));
 		return;
 	}
 
@@ -281,7 +282,7 @@ static void handle_dhcpv4(void *addr, void *data, size_t len,
 
 	if ((iface->dhcpv4_start.s_addr & ifnetmask.sin_addr.s_addr) != network ||
 			(iface->dhcpv4_end.s_addr & ifnetmask.sin_addr.s_addr) != network) {
-		syslog(LOG_WARNING, "DHCPv4 range out of assigned network");
+		fprintf(stderr, "DHCPv4 range out of assigned network\n");
 		return;
 	}
 
@@ -370,7 +371,7 @@ static void handle_dhcpv4(void *addr, void *data, size_t len,
 		 */
 	}
 
-	syslog(LOG_WARNING, "received %s from %x:%x:%x:%x:%x:%x",
+	fprintf(stderr, "received %s from %x:%x:%x:%x:%x:%x\n",
 			dhcpv4_msg_to_string(reqmsg),
 			req->chaddr[0],req->chaddr[1],req->chaddr[2],
 			req->chaddr[3],req->chaddr[4],req->chaddr[5]);
@@ -493,7 +494,7 @@ static void handle_dhcpv4(void *addr, void *data, size_t len,
 		/*
 		 * reply goes to IP broadcast -> MAC broadcast
 		 */
-		syslog(LOG_WARNING, "sending %s to ff:ff:ff:ff:ff:ff - %s",
+		fprintf(stderr, "sending %s to ff:ff:ff:ff:ff:ff - %s\n",
 				dhcpv4_msg_to_string(msg),
 				inet_ntoa(dest.sin_addr));
 	} else {
@@ -501,7 +502,7 @@ static void handle_dhcpv4(void *addr, void *data, size_t len,
 		 * reply is send directly to IP,
 		 * MAC is assumed to be the same as the request
 		 */
-		syslog(LOG_WARNING, "sending %s to %x:%x:%x:%x:%x:%x - %s",
+		fprintf(stderr, "sending %s to %x:%x:%x:%x:%x:%x - %s\n",
 				dhcpv4_msg_to_string(msg),
 				req->chaddr[0],req->chaddr[1],req->chaddr[2],
 				req->chaddr[3],req->chaddr[4],req->chaddr[5],
@@ -534,7 +535,7 @@ static bool dhcpv4_assign(struct interface *iface,
 	if (start <= raddr && raddr <= end && dhcpv4_test(iface, raddr)) {
 		assign->addr = raddr;
 		list_add(&assign->head, &iface->dhcpv4_assignments);
-		syslog(LOG_DEBUG, "assigning the IP the client asked for: %u.%u.%u.%u",
+		debug_fprintf(stderr, "assigning the IP the client asked for: %u.%u.%u.%u\n",
 				(assign->addr & 0xff000000) >> 24,
 				(assign->addr & 0x00ff0000) >> 16,
 				(assign->addr & 0x0000ff00) >> 8,
@@ -556,7 +557,7 @@ static bool dhcpv4_assign(struct interface *iface,
 	if (list_empty(&iface->dhcpv4_assignments)) {
 		assign->addr = try;
 		list_add(&assign->head, &iface->dhcpv4_assignments);
-		syslog(LOG_DEBUG, "assigning mapped IP (empty list): %u.%u.%u.%u",
+		debug_fprintf(stderr, "assigning mapped IP (empty list): %u.%u.%u.%u\n",
 				(assign->addr & 0xff000000) >> 24,
 				(assign->addr & 0x00ff0000) >> 16,
 				(assign->addr & 0x0000ff00) >> 8,
@@ -569,7 +570,7 @@ static bool dhcpv4_assign(struct interface *iface,
 			/* test was successful: IP address is not assigned, assign it */
 			assign->addr = try;
 			list_add(&assign->head, &iface->dhcpv4_assignments);
-			syslog(LOG_DEBUG, "assigning mapped IP: %u.%u.%u.%u (try %u of %u)",
+			debug_fprintf(stderr, "assigning mapped IP: %u.%u.%u.%u (try %u of %u)\n",
 					(assign->addr & 0xff000000) >> 24,
 					(assign->addr & 0x00ff0000) >> 16,
 					(assign->addr & 0x0000ff00) >> 8,
@@ -579,7 +580,7 @@ static bool dhcpv4_assign(struct interface *iface,
 		try = (((try - start) + 1) % count) + start;
 	}
 
-	syslog(LOG_DEBUG, "can't assign any IP address -> address space is full");
+	debug_fprintf(stderr, "can't assign any IP address -> address space is full\n");
 	return false;
 }
 
@@ -611,7 +612,7 @@ static struct dhcpv4_assignment* dhcpv4_lease(struct interface *iface,
 		if (!a && !iface->no_dynamic_dhcp) { // Create new binding
 			a = calloc(1, sizeof(*a) + hostlen);
 			if (!a) {
-				syslog(LOG_ERR, "Failed to calloc binding on interface %s", iface->ifname);
+				fprintf(stderr, "Failed to calloc binding on interface %s\n", iface->ifname);
 				return NULL;
 			}
 			memcpy(a->hwaddr, mac, sizeof(a->hwaddr));
@@ -623,7 +624,7 @@ static struct dhcpv4_assignment* dhcpv4_lease(struct interface *iface,
 		if (assigned && !a->hostname[0] && hostname) {
 			a = realloc(a, sizeof(*a) + hostlen);
 			if (!a) {
-				syslog(LOG_ERR, "Failed to realloc binding on interface %s", iface->ifname);
+				fprintf(stderr, "Failed to realloc binding on interface %s\n", iface->ifname);
 				return NULL;
 			}
 			memcpy(a->hostname, hostname, hostlen);
@@ -659,7 +660,6 @@ static struct dhcpv4_assignment* dhcpv4_lease(struct interface *iface,
 		a->valid_until = now + 3600; // Block address for 1h
 	}
 
-	dhcpv6_write_statefile();
 
 	return lease;
 }

@@ -26,6 +26,9 @@
 #define typeof __typeof
 #endif
 
+
+#define debug_fprintf(...) fprintf(__VA_ARGS__)
+
 #ifndef container_of
 #define container_of(ptr, type, member) (           \
     (type *)( (char *)ptr - offsetof(type,member) ))
