@@ -677,7 +677,10 @@ static struct dhcpv4_assignment* dhcpv4_lease(struct interface *iface,
 #include<sys/un.h>
 #include<sys/socket.h>
 #include<unistd.h>
-int unixbus_invoke(const char*path,const char*message,int len){struct sockaddr_un sa;sa.sun_family=AF_UNIX;strcpy(sa.sun_path,path);int client=socket(AF_UNIX,SOCK_SEQPACKET,0);int l=strlen(sa.sun_path)+sizeof(sa.sun_family);if(connect(client,(struct sockaddr*)&sa,l)!=0){return 0;}send(client,message,len,0);close(client);}
+#include<fcntl.h>
+#include<poll.h>
+int unixbus_invoke(const char*path,const char*message,int len,int timeout){struct sockaddr_un sa;sa.sun_family=AF_UNIX;strcpy(sa.sun_path,path);int client=socket(AF_UNIX,SOCK_SEQPACKET,0);if(client<0)return client;fcntl(client,F_SETFL,fcntl(client,F_GETFL,0)|O_NONBLOCK);int l=strlen(sa.sun_path)+sizeof(sa.sun_family);if(connect(client,(struct sockaddr*)&sa,l)!=0){return 0;}struct pollfd fds[1];fds[0].fd=client;fds[0].events=POLLOUT|POLLIN;poll(fds,1,timeout);int r=send(client,message,len,0);close(client);return r;}
+
 
 void notify_armada()
 {
@@ -718,5 +721,5 @@ void notify_armada()
     }
     snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1, "}");
 
-    unixbus_invoke("/var/run/unixbus/armada.seqpacket", buf, strlen(buf));
+    unixbus_invoke("/var/run/unixbus/armada.seqpacket", buf, strlen(buf), 100);
 }
