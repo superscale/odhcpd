@@ -2,6 +2,7 @@
 #include <libubus.h>
 #include <libubox/uloop.h>
 #include <arpa/inet.h>
+#include <string.h>
 
 #include "odhcpd.h"
 #include "dhcpv6.h"
